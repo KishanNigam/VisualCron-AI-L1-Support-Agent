@@ -43,7 +43,8 @@ internal static class Program
             logger.LogInformation("Failure mail parser sample result. JobName: {JobName}, Environment: {Environment}, Server: {Server}, IsValid: {IsValid}", metadata.JobName, metadata.Environment, metadata.Server, metadata.IsValid);
 
             var discoveryUseCase = host.Services.GetRequiredService<DiscoverFailureMailsUseCase>();
-            FailureMailDiscoveryResult discoveryResult = await discoveryUseCase.ExecuteAsync(Guid.NewGuid().ToString("N"));
+            string executionId = Guid.NewGuid().ToString("N");
+            FailureMailDiscoveryResult discoveryResult = await discoveryUseCase.ExecuteAsync(executionId);
             logger.LogInformation("Failure mail discovery completed. New mails: {Count}", discoveryResult.NewMailCount);
 
             var attachmentUseCase = host.Services.GetRequiredService<IDownloadFailureMailAttachmentsUseCase>();
@@ -102,6 +103,61 @@ internal static class Program
                         for (int index = 0; index < firstThreeLines.Length; index++)
                         {
                             logger.LogInformation("Line {Index}: {Line}", index + 1, firstThreeLines[index]);
+                        }
+
+                        FailureMailMetadata mailMetadata = parser.Parse(mail.Subject ?? string.Empty);
+                        string? promptDirectory = Path.GetDirectoryName(result.FullPath);
+                        if (!string.IsNullOrWhiteSpace(promptDirectory))
+                        {
+                            string promptFilePath = Path.Combine(promptDirectory, "Prompt.md");
+                            string promptContent = $$"""
+# VisualCron AI Production Support Agent
+
+## INCIDENT DETAILS
+
+Execution ID: {{executionId}}
+Subject: {{mail.Subject ?? "Not enough evidence"}}
+Job Name: {{mailMetadata.JobName ?? "Not enough evidence"}}
+Environment: {{mailMetadata.Environment ?? "Not enough evidence"}}
+Server: {{mailMetadata.Server ?? "Not enough evidence"}}
+Received Time: {{mail.ReceivedTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "Not enough evidence"}}
+Sender: {{mail.Sender ?? "Not enough evidence"}}
+
+## LOG FILES
+
+### {{result.LogFileName}}
+{{result.Content}}
+
+## YOUR TASK
+
+You are an L3 Production Support Engineer.
+
+Analyze the logs.
+
+Generate
+
+1 Failure Summary
+2 Root Cause
+3 Failed Component
+4 Evidence
+5 Business Impact
+6 Recommended Fix
+7 Client Acknowledgement Mail
+8 Client RCA Mail
+
+Return markdown.
+
+Do not hallucinate.
+
+If information is missing,
+say "Not enough evidence".
+""";
+
+                            File.WriteAllText(promptFilePath, promptContent);
+                            long promptSize = new FileInfo(promptFilePath).Length;
+                            logger.LogInformation("Prompt Generated: {Path}", promptFilePath);
+                            logger.LogInformation("Prompt Path: {Path}", promptFilePath);
+                            logger.LogInformation("Prompt Size: {Size} bytes", promptSize);
                         }
                     }
                 }
