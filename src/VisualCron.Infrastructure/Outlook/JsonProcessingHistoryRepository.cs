@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using VisualCron.Application.Configuration;
 using VisualCron.Application.Outlook;
 
 namespace VisualCron.Infrastructure.Outlook;
@@ -10,9 +11,16 @@ public sealed class JsonProcessingHistoryRepository : IProcessingHistoryReposito
     private readonly string _historyDirectory;
     private readonly ILogger<JsonProcessingHistoryRepository> _logger;
 
-    public JsonProcessingHistoryRepository(IOptions<OutlookOptions> options, ILogger<JsonProcessingHistoryRepository> logger)
+    public JsonProcessingHistoryRepository(IOptions<OutlookOptions> options, ILogger<JsonProcessingHistoryRepository> logger, IApplicationConfiguration? configuration = null)
     {
-        _historyDirectory = Path.Combine(AppContext.BaseDirectory, "runtime", "archive", "history");
+        string configuredHistoryRoot = configuration is null
+            ? string.Empty
+            : string.IsNullOrWhiteSpace(configuration.ExecutionWorkspacePath)
+                ? string.IsNullOrWhiteSpace(configuration.HistoryRoot)
+                    ? Path.Combine(string.IsNullOrWhiteSpace(configuration.ArchiveRoot) ? configuration.RuntimeRoot : configuration.ArchiveRoot, "history")
+                    : configuration.HistoryRoot
+                : Path.Combine(configuration.ExecutionWorkspacePath, "history");
+        _historyDirectory = ResolveConfiguredPath(configuredHistoryRoot);
         _logger = logger;
     }
 
@@ -51,5 +59,17 @@ public sealed class JsonProcessingHistoryRepository : IProcessingHistoryReposito
         }
 
         return key;
+    }
+
+    private static string ResolveConfiguredPath(string configuredPath)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return Path.Combine(AppContext.BaseDirectory, "runtime", "archive", "history");
+        }
+
+        return Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredPath));
     }
 }

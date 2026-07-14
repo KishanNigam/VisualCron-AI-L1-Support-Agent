@@ -12,6 +12,8 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<DownloadFailureMailAttachmentsUseCase>();
         services.AddSingleton<IDownloadFailureMailAttachmentsUseCase, DownloadFailureMailAttachmentsUseCase>();
         services.AddSingleton<ReadLogFilesUseCase>();
+        services.AddSingleton<ReadAIOutputFileUseCase>();
+        services.AddSingleton<ParseAIOutputUseCase>();
         return services;
     }
 }

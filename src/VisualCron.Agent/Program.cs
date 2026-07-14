@@ -1,8 +1,10 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using VisualCron.Agent.Extensions;
+using VisualCron.Application.Configuration;
 using VisualCron.Application.Outlook;
 
 namespace VisualCron.Agent;
@@ -35,9 +37,23 @@ internal static class Program
 
         await host.StartAsync();
 
+        ILogger logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("VisualCron.Agent");
+
         try
         {
-            var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("VisualCron.Agent");
+            var configuration = host.Services.GetRequiredService<IApplicationConfiguration>();
+            var startupValidator = new StartupValidationService(configuration, AppContext.BaseDirectory);
+            StartupValidationResult validation = startupValidator.ValidateAndPrepare();
+            string executionRoot = validation.ExecutionRoot;
+            string executionWorkspacePath = Path.Combine(executionRoot, DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"));
+            Directory.CreateDirectory(executionWorkspacePath);
+            configuration.ExecutionWorkspacePath = executionWorkspacePath;
+            logger.LogInformation("Execution Root: {ExecutionRoot}", executionRoot);
+            logger.LogInformation("Execution Workspace: {ExecutionWorkspace}", executionWorkspacePath);
+            logger.LogInformation("Copilot Runner Script: {RunnerScript}", validation.CopilotRunnerScript);
+            logger.LogInformation("Copilot Command: {Command}", configuration.CopilotCommand);
+            logger.LogInformation("AI Output Placeholder: {AiOutputPath}", Path.Combine(executionWorkspacePath, configuration.AIOutputFileName));
+
             var parser = host.Services.GetRequiredService<IFailureMailSubjectParser>();
             FailureMailMetadata metadata = parser.Parse("[EXTERNAL] EAS-P5-MW - BAI6_File_Import - PROD - BHSIEAS32");
             logger.LogInformation("Failure mail parser sample result. JobName: {JobName}, Environment: {Environment}, Server: {Server}, IsValid: {IsValid}", metadata.JobName, metadata.Environment, metadata.Server, metadata.IsValid);
@@ -109,7 +125,8 @@ internal static class Program
                         string? promptDirectory = Path.GetDirectoryName(result.FullPath);
                         if (!string.IsNullOrWhiteSpace(promptDirectory))
                         {
-                            string promptFilePath = Path.Combine(promptDirectory, "Prompt.md");
+                            string promptFileName = string.IsNullOrWhiteSpace(configuration.PromptFileName) ? "Prompt.md" : configuration.PromptFileName;
+                            string promptFilePath = Path.Combine(promptDirectory, promptFileName);
                             string promptContent = $$"""
 # VisualCron AI Production Support Agent
 
@@ -158,8 +175,32 @@ say "Not enough evidence".
                             logger.LogInformation("Prompt Generated: {Path}", promptFilePath);
                             logger.LogInformation("Prompt Path: {Path}", promptFilePath);
                             logger.LogInformation("Prompt Size: {Size} bytes", promptSize);
+
+                            string aiOutputPath = Path.Combine(promptDirectory, "AI_Output.md");
+                            await ExecuteCopilotRunnerAsync(logger, configuration.CopilotCommand, validation.CopilotRunnerScript, promptFilePath, aiOutputPath);
+                            var aiOutputReader = host.Services.GetRequiredService<ReadAIOutputFileUseCase>();
+                            AIOutputReadResult aiOutputResult = await aiOutputReader.ExecuteAsync(aiOutputPath);
+                            logger.LogInformation("AI Output Read successfully: {Path}", aiOutputResult.FilePath);
+                            logger.LogInformation("AI Output Size: {Size} bytes", aiOutputResult.FileSize);
+                            logger.LogInformation("AI Output Character Count: {CharacterCount}", aiOutputResult.FullContent.Length);
+
+                            var aiOutputParser = host.Services.GetRequiredService<ParseAIOutputUseCase>();
+                            AIAnalysisResult aiAnalysisResult = aiOutputParser.Execute(aiOutputResult.FullContent, aiOutputResult.FilePath);
+                            logger.LogInformation("AI Output Parsed: {Path}", aiOutputResult.FilePath);
+                            logger.LogInformation("Parsed Incident Summary: {Value}", aiAnalysisResult.IncidentSummary);
+                            logger.LogInformation("Parsed Root Cause: {Value}", aiAnalysisResult.RootCause);
+                            logger.LogInformation("Parsed Impact: {Value}", aiAnalysisResult.Impact);
+                            logger.LogInformation("Parsed Recommended Action: {Value}", aiAnalysisResult.RecommendedAction);
+                            logger.LogInformation("Parsed Confidence: {Value}", aiAnalysisResult.Confidence);
+                            logger.LogInformation("Parsed Client Communication: {Value}", aiAnalysisResult.ClientCommunication);
+                            logger.LogInformation("Parsed Internal Notes: {Value}", aiAnalysisResult.InternalNotes);
                         }
                     }
+                }
+                catch (InvalidOperationException ex) when (ex.Message.Contains("Copilot runner", StringComparison.OrdinalIgnoreCase)
+                    || ex.Message.Contains("AI output", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -167,11 +208,83 @@ say "Not enough evidence".
                 }
             }
         }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogCritical(ex, "Startup validation failed.");
+        }
         catch (Exception ex)
         {
-            host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("VisualCron.Agent").LogError(ex, "Failure mail discovery failed.");
+            logger.LogError(ex, "Failure mail discovery failed.");
         }
 
         await host.StopAsync();
+    }
+
+    private static Task ExecuteCopilotRunnerAsync(ILogger logger, string copilotCommand, string runnerScriptPath, string promptPath, string outputPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(copilotCommand);
+        ArgumentException.ThrowIfNullOrWhiteSpace(runnerScriptPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(promptPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+
+        ProcessStartInfo startInfo = new()
+        {
+            FileName = copilotCommand,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = AppContext.BaseDirectory
+        };
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(runnerScriptPath);
+        startInfo.ArgumentList.Add("-PromptPath");
+        startInfo.ArgumentList.Add(promptPath);
+        startInfo.ArgumentList.Add("-OutputPath");
+        startInfo.ArgumentList.Add(outputPath);
+
+        using Process? process = Process.Start(startInfo);
+        if (process is null)
+        {
+            throw new InvalidOperationException("Unable to start the Copilot runner process.");
+        }
+
+        string standardOutput = process.StandardOutput.ReadToEnd();
+        string standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        logger.LogInformation("Copilot Runner Exit Code: {ExitCode}", process.ExitCode);
+
+        if (!string.IsNullOrWhiteSpace(standardOutput))
+        {
+            logger.LogInformation("Copilot Runner Standard Output: {Output}", standardOutput.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(standardError))
+        {
+            logger.LogWarning("Copilot Runner Standard Error: {Error}", standardError.Trim());
+        }
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"Copilot runner exited with code {process.ExitCode}.");
+        }
+
+        if (!File.Exists(outputPath))
+        {
+            throw new InvalidOperationException($"AI output file was not created at '{outputPath}'.");
+        }
+
+        FileInfo outputFileInfo = new(outputPath);
+        if (outputFileInfo.Length <= 0)
+        {
+            throw new InvalidOperationException($"AI output file '{outputPath}' is empty.");
+        }
+
+        logger.LogInformation("AI Output Verified: {Path}", outputPath);
+        return Task.CompletedTask;
     }
 }

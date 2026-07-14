@@ -1,17 +1,17 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+using VisualCron.Application.Configuration;
 using VisualCron.Application.Outlook;
 
 namespace VisualCron.Infrastructure.Outlook;
 
 public sealed class OutlookMailboxService : IOutlookMailboxService
 {
-    private readonly OutlookOptions _options;
+    private readonly IApplicationConfiguration _configuration;
     private readonly ILogger<OutlookMailboxService> _logger;
 
-    public OutlookMailboxService(IOptions<OutlookOptions> options, ILogger<OutlookMailboxService> logger)
+    public OutlookMailboxService(IApplicationConfiguration configuration, ILogger<OutlookMailboxService> logger)
     {
-        _options = options.Value;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -30,7 +30,7 @@ public sealed class OutlookMailboxService : IOutlookMailboxService
 
             dynamic outlook = Activator.CreateInstance(outlookType) ?? throw new InvalidOperationException("Unable to create an Outlook application instance.");
 
-            string mailboxName = _options.Mailbox ?? string.Empty;
+            string mailboxName = _configuration.ReadMailbox ?? string.Empty;
             _logger.LogInformation("Configured Mailbox: {MailboxName}", string.IsNullOrWhiteSpace(mailboxName) ? "NULL" : mailboxName);
             if (string.IsNullOrWhiteSpace(mailboxName))
             {

@@ -35,15 +35,20 @@ Write-Log "Prompt Size: $promptSize bytes"
 
 if ([string]::IsNullOrWhiteSpace($promptContent)) {
     Write-Log 'Prompt is empty.'
-    exit 2
+    exit 1
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     Write-Log 'Output Path is required.'
-    exit 4
+    exit 2
 }
 
 $resolvedOutputPath = [System.IO.Path]::GetFullPath($OutputPath)
+$outputDirectory = Split-Path -Parent $resolvedOutputPath
+if (-not [string]::IsNullOrWhiteSpace($outputDirectory) -and -not (Test-Path -LiteralPath $outputDirectory -PathType Container)) {
+    Write-Log 'Output directory does not exist.'
+    exit 2
+}
 
 $copilotCommand = Get-Command copilot -ErrorAction SilentlyContinue
 if ($null -eq $copilotCommand) {
@@ -52,11 +57,10 @@ if ($null -eq $copilotCommand) {
 }
 
 Write-Log 'Executing Copilot'
-Write-Log 'Waiting'
 
 try {
     Set-StrictMode -Off
-    $copilotOutput = Get-Content -LiteralPath $resolvedPromptPath -Raw | & $copilotCommand.Source --allow-all --silent 2>&1
+    $copilotOutput = & $copilotCommand.Source --allow-all --silent --prompt $promptContent 2>&1
     $exitCode = $LASTEXITCODE
 }
 catch {
@@ -72,12 +76,13 @@ if ($exitCode -ne 0) {
     exit 3
 }
 
-$outputDirectory = Split-Path -Parent $resolvedOutputPath
-if (-not [string]::IsNullOrWhiteSpace($outputDirectory)) {
-    New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+try {
+    $copilotOutput | Set-Content -LiteralPath $resolvedOutputPath -Encoding utf8
 }
-
-$copilotOutput | Set-Content -LiteralPath $resolvedOutputPath -Encoding utf8
+catch {
+    Write-Log "Output write failed: $($_.Exception.Message)"
+    exit 4
+}
 
 if (-not (Test-Path -LiteralPath $resolvedOutputPath -PathType Leaf)) {
     Write-Log 'Output file was not created.'

@@ -8,6 +8,8 @@ public interface IApplicationConfiguration
 
     string ExecutionRoot { get; }
 
+    string ExecutionWorkspacePath { get; set; }
+
     string HistoryRoot { get; }
 
     string ArchiveRoot { get; }
@@ -21,6 +23,8 @@ public interface IApplicationConfiguration
     string ReadMailbox { get; }
 
     string DraftMailbox { get; }
+
+    string FailureMailPrefix { get; }
 
     string CopilotRunnerScript { get; }
 

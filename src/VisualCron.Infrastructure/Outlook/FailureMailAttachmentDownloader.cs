@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using VisualCron.Application.Configuration;
 using VisualCron.Application.Outlook;
 
 namespace VisualCron.Infrastructure.Outlook;
@@ -6,10 +7,12 @@ namespace VisualCron.Infrastructure.Outlook;
 public sealed class FailureMailAttachmentDownloader : IFailureMailAttachmentDownloader
 {
     private readonly ILogger<FailureMailAttachmentDownloader> _logger;
+    private readonly IApplicationConfiguration? _configuration;
 
-    public FailureMailAttachmentDownloader(ILogger<FailureMailAttachmentDownloader> logger)
+    public FailureMailAttachmentDownloader(ILogger<FailureMailAttachmentDownloader> logger, IApplicationConfiguration? configuration = null)
     {
         _logger = logger;
+        _configuration = configuration;
     }
 
     public Task<IReadOnlyList<DownloadedAttachment>> DownloadAsync(object mail, CancellationToken cancellationToken = default)
@@ -26,9 +29,14 @@ public sealed class FailureMailAttachmentDownloader : IFailureMailAttachmentDown
             return Task.FromResult<IReadOnlyList<DownloadedAttachment>>(Array.Empty<DownloadedAttachment>());
         }
 
-        string executionId = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-        string runDirectory = Path.Combine(AppContext.BaseDirectory, "runtime", "temp", executionId);
-        Directory.CreateDirectory(runDirectory);
+        string executionWorkspace = _configuration is null
+            ? Path.Combine(AppContext.BaseDirectory, "runtime", "executions", DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"))
+            : ResolveConfiguredPath(string.IsNullOrWhiteSpace(_configuration.ExecutionWorkspacePath)
+                ? Path.Combine(ResolveConfiguredPath(string.IsNullOrWhiteSpace(_configuration.ExecutionRoot)
+                    ? _configuration.RuntimeRoot
+                    : _configuration.ExecutionRoot), DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"))
+                : _configuration.ExecutionWorkspacePath);
+        Directory.CreateDirectory(executionWorkspace);
 
         var downloaded = new List<DownloadedAttachment>();
         for (int index = 1; index <= count; index++)
@@ -49,7 +57,7 @@ public sealed class FailureMailAttachmentDownloader : IFailureMailAttachmentDown
                 continue;
             }
 
-            string destinationPath = Path.Combine(runDirectory, Path.GetFileName(fileName));
+            string destinationPath = Path.Combine(executionWorkspace, Path.GetFileName(fileName));
             attachment.SaveAsFile(destinationPath);
 
             downloaded.Add(new DownloadedAttachment
@@ -65,7 +73,19 @@ public sealed class FailureMailAttachmentDownloader : IFailureMailAttachmentDown
             _logger.LogInformation("Destination Path: {DestinationPath}", destinationPath);
         }
 
-        _logger.LogInformation("Completed. Execution Folder: {ExecutionFolder}", runDirectory);
+        _logger.LogInformation("Completed. Execution Folder: {ExecutionFolder}", executionWorkspace);
         return Task.FromResult<IReadOnlyList<DownloadedAttachment>>(downloaded);
+    }
+
+    private static string ResolveConfiguredPath(string configuredPath)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return Path.Combine(AppContext.BaseDirectory, "runtime");
+        }
+
+        return Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredPath));
     }
 }

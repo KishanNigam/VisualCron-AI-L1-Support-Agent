@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using VisualCron.Application.Configuration;
 using VisualCron.Application.Outlook;
 
 namespace VisualCron.Infrastructure.Outlook;
@@ -11,11 +12,13 @@ public sealed class FailureMailDiscoveryService : IFailureMailDiscoveryService
     private readonly string _failureMailPrefix;
     private readonly int _maxEmailsToScan;
 
-    public FailureMailDiscoveryService(IOutlookMailboxService mailboxService, IOptions<OutlookOptions> options, ILogger<FailureMailDiscoveryService> logger)
+    public FailureMailDiscoveryService(IOutlookMailboxService mailboxService, IOptions<OutlookOptions> options, ILogger<FailureMailDiscoveryService> logger, IApplicationConfiguration configuration)
     {
         _mailboxService = mailboxService;
         _logger = logger;
-        _failureMailPrefix = options.Value.FailureMailSubjectPrefix ?? string.Empty;
+        _failureMailPrefix = string.IsNullOrWhiteSpace(configuration.FailureMailPrefix)
+            ? options.Value.FailureMailSubjectPrefix ?? string.Empty
+            : configuration.FailureMailPrefix;
         _maxEmailsToScan = options.Value.MaxEmailsToScan > 0 ? options.Value.MaxEmailsToScan : 50;
     }
 

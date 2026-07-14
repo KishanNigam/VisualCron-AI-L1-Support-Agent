@@ -10,6 +10,7 @@ public sealed class ApplicationConfiguration : IApplicationConfiguration
         ApplicationName = options.Value.Application?.Name ?? string.Empty;
         RuntimeRoot = options.Value.Runtime?.Root ?? string.Empty;
         ExecutionRoot = options.Value.Runtime?.ExecutionRoot ?? string.Empty;
+        ExecutionWorkspacePath = string.Empty;
         HistoryRoot = options.Value.Runtime?.HistoryRoot ?? string.Empty;
         ArchiveRoot = options.Value.Runtime?.ArchiveRoot ?? string.Empty;
         LogsRoot = options.Value.Runtime?.LogsRoot ?? string.Empty;
@@ -17,6 +18,7 @@ public sealed class ApplicationConfiguration : IApplicationConfiguration
         AIOutputFileName = options.Value.Runtime?.AIOutputFileName ?? "AIOutput.md";
         ReadMailbox = options.Value.Outlook?.ReadMailbox ?? string.Empty;
         DraftMailbox = options.Value.Outlook?.DraftMailbox ?? string.Empty;
+        FailureMailPrefix = options.Value.Outlook?.FailureMailPrefix ?? string.Empty;
         CopilotRunnerScript = options.Value.Copilot?.RunnerScript ?? string.Empty;
         CopilotCommand = options.Value.Copilot?.Command ?? string.Empty;
     }
@@ -26,6 +28,8 @@ public sealed class ApplicationConfiguration : IApplicationConfiguration
     public string RuntimeRoot { get; }
 
     public string ExecutionRoot { get; }
+
+    public string ExecutionWorkspacePath { get; set; }
 
     public string HistoryRoot { get; }
 
@@ -40,6 +44,8 @@ public sealed class ApplicationConfiguration : IApplicationConfiguration
     public string ReadMailbox { get; }
 
     public string DraftMailbox { get; }
+
+    public string FailureMailPrefix { get; }
 
     public string CopilotRunnerScript { get; }
 
@@ -86,6 +92,8 @@ public sealed class OutlookSection
     public string ReadMailbox { get; set; } = string.Empty;
 
     public string DraftMailbox { get; set; } = string.Empty;
+
+    public string FailureMailPrefix { get; set; } = string.Empty;
 }
 
 public sealed class CopilotSection
