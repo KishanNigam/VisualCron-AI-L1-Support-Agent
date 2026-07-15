@@ -20,8 +20,6 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IFailureMailDiscoveryService, FailureMailDiscoveryService>();
         services.AddSingleton<IFailureMailAttachmentDownloader, FailureMailAttachmentDownloader>();
         services.AddSingleton<ILogFileReader, LogFileReader>();
-        services.AddSingleton<IAIOutputFileReader, AIOutputFileReader>();
-        services.AddSingleton<IAIOutputParser, AIOutputParser>();
         services.AddSingleton<IProcessingHistoryRepository, JsonProcessingHistoryRepository>();
         return services;
     }

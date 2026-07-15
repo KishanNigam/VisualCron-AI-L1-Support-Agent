@@ -28,23 +28,7 @@ public sealed class StartupValidationService
             Directory.CreateDirectory(directory);
         }
 
-        string runnerScriptPath = ResolveExistingPath(_configuration.CopilotRunnerScript);
-        if (!File.Exists(runnerScriptPath))
-        {
-            throw new InvalidOperationException($"Copilot runner script was not found at '{runnerScriptPath}'.");
-        }
-
-        if (string.IsNullOrWhiteSpace(_configuration.CopilotCommand))
-        {
-            throw new InvalidOperationException("CopilotCommand must be configured before startup.");
-        }
-
-        if (!CanResolveCommand(_configuration.CopilotCommand))
-        {
-            throw new InvalidOperationException($"Copilot command '{_configuration.CopilotCommand}' could not be resolved on this system.");
-        }
-
-        return new StartupValidationResult(runtimeRoot, executionRoot, historyRoot, archiveRoot, logsRoot, runnerScriptPath);
+        return new StartupValidationResult(runtimeRoot, executionRoot, historyRoot, archiveRoot, logsRoot, string.Empty);
     }
 
     private void ValidateRequiredConfiguration()
@@ -57,9 +41,6 @@ public sealed class StartupValidationService
         ValidateRequiredValue(_configuration.ArchiveRoot, nameof(IApplicationConfiguration.ArchiveRoot));
         ValidateRequiredValue(_configuration.LogsRoot, nameof(IApplicationConfiguration.LogsRoot));
         ValidateRequiredValue(_configuration.PromptFileName, nameof(IApplicationConfiguration.PromptFileName));
-        ValidateRequiredValue(_configuration.AIOutputFileName, nameof(IApplicationConfiguration.AIOutputFileName));
-        ValidateRequiredValue(_configuration.CopilotRunnerScript, nameof(IApplicationConfiguration.CopilotRunnerScript));
-        ValidateRequiredValue(_configuration.CopilotCommand, nameof(IApplicationConfiguration.CopilotCommand));
     }
 
     private static void ValidateRequiredValue(string value, string propertyName)

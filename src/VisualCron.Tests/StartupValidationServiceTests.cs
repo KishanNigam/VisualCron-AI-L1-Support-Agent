@@ -23,11 +23,9 @@ public sealed class StartupValidationServiceTests
                 AIOutputFileName = "AIOutput.md",
                 ReadMailbox = "user@example.com",
                 DraftMailbox = "draft@example.com",
-                CopilotRunnerScript = "RunCopilot.ps1",
+                CopilotRunnerScript = string.Empty,
                 CopilotCommand = "pwsh"
             };
-
-            File.WriteAllText(Path.Combine(tempRoot, "RunCopilot.ps1"), "Write-Host 'ok'");
 
             var validator = new StartupValidationService(configuration, tempRoot);
 
@@ -72,7 +70,7 @@ public sealed class StartupValidationServiceTests
                 AIOutputFileName = "AIOutput.md",
                 ReadMailbox = string.Empty,
                 DraftMailbox = "draft@example.com",
-                CopilotRunnerScript = "RunCopilot.ps1",
+                CopilotRunnerScript = string.Empty,
                 CopilotCommand = "pwsh"
             };
 
